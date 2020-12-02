@@ -118,6 +118,9 @@ public class CompareSAMs extends CommandLineProgram {
             if (OUTPUT != null) {
                 comparison.writeReport(OUTPUT, getDefaultHeaders());
             }
+            if (samComparisonArgumentCollection.OUTPUT_MQ_CONCORDANCE != null) {
+                comparison.writeMQConcordanceReport(samComparisonArgumentCollection.OUTPUT_MQ_CONCORDANCE, getDefaultHeaders());
+            }
             if (comparison.areEqual()) {
                 System.out.println("SAM files match.");
             } else {

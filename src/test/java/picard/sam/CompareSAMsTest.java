@@ -24,9 +24,11 @@
 package picard.sam;
 
 import htsjdk.samtools.metrics.MetricsFile;
+import htsjdk.samtools.util.Histogram;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
+import picard.PicardException;
 import picard.cmdline.CommandLineProgramTest;
 
 import java.io.File;
@@ -36,6 +38,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class CompareSAMsTest extends CommandLineProgramTest {
     private static final File TEST_FILES_DIR = new File("testdata/picard/sam/CompareSAMs");
@@ -119,5 +124,77 @@ public class CompareSAMsTest extends CommandLineProgramTest {
 
         Assert.assertEquals(metricsOutput.getMetrics().get(1).LEFT_FILE, in2);
         Assert.assertEquals(metricsOutput.getMetrics().get(1).RIGHT_FILE, in1);
+    }
+
+    @DataProvider(name="compareSamsMQConcordance")
+    public Object[][] compareSamsMQConcordanceTestData() {
+        return new Object[][] {
+                {"genomic_sorted.sam", "unsorted.sam", null},
+                {"genomic_sorted.sam", "chr21.sam", null},
+                {"genomic_sorted.sam", "bigger_seq_dict.sam", null},
+                {"genomic_sorted.sam", "genomic_sorted.sam", new Object[][] { {"20,20", 1}, {"30,30", 1}}},
+                {"genomic_sorted.sam", "has_non_primary.sam", new Object[][] { {"20,20", 1}, {"30,30", 1}}},
+                {"genomic_sorted_5.sam", "genomic_sorted_5_plus.sam", new Object[][] { {"20,20", 1}, {"30,30", 4}}},
+                {"group_same_coord.sam", "group_same_coord_diff_order.sam", new Object[][] { {"20,20", 1}, {"30,30", 2}}},
+                {"genomic_sorted_same_position.sam", "genomic_sorted_same_position.sam", new Object[][] { {"0,0", 2}}},
+                {"group_same_coord.sam", "diff_coords.sam", new Object[][] { {"20,20", 1}, {"30,30", 4}}},
+                {"genomic_sorted.sam", "unmapped_first.sam", new Object[][] { {"20,0", 1}, {"30,30", 1}}},
+                {"genomic_sorted.sam", "unmapped_second.sam", new Object[][] { {"30,0", 1}, {"20,20", 1}}},
+                {"unmapped_first.sam", "unmapped_second.sam", new Object[][] { {"0,20", 1}, {"30,0", 1}}},
+                {"unmapped_first.sam", "unmapped_first.sam", new Object[][] { {"0,0", 1}, {"30,30", 1}}},
+                {"genomic_sorted.sam", "genomic_sorted_sam_v1.6.sam", new Object[][] { {"20,20", 1}, {"30,30", 1}}},
+                {"unsorted.sam", "unsorted.sam", new Object[][] { {"20,20", 1}, {"30,30", 1}}},
+                {"unsorted.sam", "unsorted2.sam", new Object[][] { {"20,20", 1}}},
+                {"duplicate_base.sam", "duplicate_four_mismatch_strict.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base.sam", "duplicate_four_mismatch_lenient_one_align_differ.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base.sam", "duplicate_two_mismatch_lenient.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base.sam", "duplicate_four_mismatch_lenient.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base.sam", "duplicate_four_mismatch_strict.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base_queryname.sam", "duplicate_four_mismatch_strict_queryname.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base_queryname.sam", "duplicate_four_mismatch_lenient_one_align_differ_queryname.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base_queryname.sam", "duplicate_two_mismatch_lenient_queryname.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base_queryname.sam", "duplicate_four_mismatch_lenient_queryname.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"duplicate_base_queryname.sam", "duplicate_four_mismatch_strict_queryname.sam", new Object[][] { {"20,20", 2}, {"30,30", 12}}},
+                {"genomic_sorted.sam", "mq0_2.sam", new Object[][] { {"20,0", 1}, {"30,30", 1}}},
+                {"mq0_1.sam", "mq0_2.sam", new Object[][] { {"0,0", 1}, {"30,30", 1}}}
+        };
+    }
+
+    @Test(dataProvider = "compareSamsMQConcordance")
+    public void testMQConcordance(final String f1, final String f2, final Object[][] expectedMQConcordance) throws IOException {
+        final Path tmpOutput = Files.createTempFile("compareSam", ".tsv");
+        final Path tmpMQConcordanceOutput = Files.createTempFile("compareSam.mqconcordance", ".tsv");
+        final String in1 = new File(TEST_FILES_DIR, f1).getAbsolutePath();
+        final String in2 = new File(TEST_FILES_DIR, f2).getAbsolutePath();
+        ArrayList<String> commandArgs = new ArrayList<>(
+                Arrays.asList(
+                        in1,
+                        in2,
+                        "O=" + tmpOutput,
+                        "OUTPUT_MQ_CONCORDANCE=" + tmpMQConcordanceOutput
+                )
+        );
+        if (expectedMQConcordance == null) {
+            boolean exceptionThrown = false;
+            try {
+                runPicardCommandLine(commandArgs);
+            } catch (final PicardException x) {
+                exceptionThrown = true;
+            } finally {
+                Assert.assertTrue(exceptionThrown);
+            }
+        } else {
+            Map<String, Integer> expectedMQConcordanceMap = Stream.of(expectedMQConcordance).collect(Collectors.toMap(data -> (String) data[0], data -> (Integer) data[1]));
+            final Histogram<String> expectedMQConcordanceHistogram = new Histogram<>();
+            expectedMQConcordanceMap.forEach(expectedMQConcordanceHistogram::increment);
+
+            runPicardCommandLine(commandArgs);
+
+            final MetricsFile<SamComparisonMetric, String> mqMetricsOutput = new MetricsFile<>();
+            mqMetricsOutput.read(new FileReader(tmpMQConcordanceOutput.toFile()));
+            Assert.assertEquals(mqMetricsOutput.getNumHistograms(), 1);
+            final Histogram<String> mqConcordanceHistogram = mqMetricsOutput.getHistogram();
+            Assert.assertEquals(mqConcordanceHistogram, expectedMQConcordanceHistogram);
+        }
     }
 }

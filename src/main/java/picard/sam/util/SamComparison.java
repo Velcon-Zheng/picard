@@ -3,6 +3,8 @@ package picard.sam.util;
 import htsjdk.samtools.*;
 import htsjdk.samtools.metrics.Header;
 import htsjdk.samtools.metrics.MetricsFile;
+import htsjdk.samtools.metrics.StringHeader;
+import htsjdk.samtools.util.Histogram;
 import htsjdk.samtools.util.IterableAdapter;
 import htsjdk.samtools.util.SortingCollection;
 import picard.PicardException;
@@ -28,6 +30,7 @@ public final class SamComparison {
     private final SamComparisonMetric comparisonMetric = new SamComparisonMetric();
 
     private final SAMComparisonArgumentCollection samComparisonArgumentCollection;
+    private final Histogram<String> mappingQualityHistogram = new Histogram<>();
 
     private SortingCollection<SAMRecord> markDuplicatesCheckLeft;
     private SortingCollection<SAMRecord> markDuplicatesCheckRight;
@@ -70,6 +73,16 @@ public final class SamComparison {
         headers.forEach(comparisonMetricFile::addHeader);
         comparisonMetricFile.addAllMetrics(Collections.singletonList(comparisonMetric));
         comparisonMetricFile.write(output);
+    }
+
+    public void writeMQConcordanceReport(final File output, final List<Header> headers) {
+        final MetricsFile<?, String> mappingQualityConcordanceMetricsFile = new MetricsFile<>();
+
+        headers.forEach(mappingQualityConcordanceMetricsFile::addHeader);
+        mappingQualityConcordanceMetricsFile.addHeader(new StringHeader("Left file: " + comparisonMetric.LEFT_FILE));
+        mappingQualityConcordanceMetricsFile.addHeader(new StringHeader("Right file: " + comparisonMetric.RIGHT_FILE));
+        mappingQualityConcordanceMetricsFile.addHistogram(mappingQualityHistogram);
+        mappingQualityConcordanceMetricsFile.write(output);
     }
 
     private void setupLenientDuplicateChecking() {
@@ -155,12 +168,18 @@ public final class SamComparison {
         if (!compareValues(leftReader.getFileHeader().getSortOrder(), rightReader.getFileHeader().getSortOrder(),
                 "Sort Order")) {
             System.out.println("Cannot compare alignments if sort orders differ.");
+            if (samComparisonArgumentCollection.OUTPUT_MQ_CONCORDANCE != null) {
+                throw new PicardException("Cannot generate mapping quality concordance histogram because the two files cannot be compared (see reason above).");
+            }
             return false;
         }
         switch (leftReader.getFileHeader().getSortOrder()) {
             case coordinate:
                 if (sequenceDictionariesDiffer) {
                     System.out.println("Cannot compare coordinate-sorted SAM files because sequence dictionaries differ.");
+                    if (samComparisonArgumentCollection.OUTPUT_MQ_CONCORDANCE != null) {
+                        throw new PicardException("Cannot generate mapping quality concordance histogram because the two files cannot be compared (see reason above).");
+                    }
                     return false;
                 }
                 return compareCoordinateSortedAlignments();
@@ -397,6 +416,10 @@ public final class SamComparison {
                 (samComparisonArgumentCollection.LENIENT_UNKNOWN_MQ_ALIGNMENT && s1.getMappingQuality() == SAMRecord.UNKNOWN_MAPPING_QUALITY && s2.getMappingQuality() == SAMRecord.UNKNOWN_MAPPING_QUALITY));
     }
 
+    private void compareAndUpdateMappingQualityConcordance(final SAMRecord s1, final SAMRecord s2) {
+        mappingQualityHistogram.increment(new Pair<>(s1.getMappingQuality(), s2.getMappingQuality()).toString());
+    }
+
     /**
      * Compare the mapping information for two SAMRecords.  Makes comparison of alignments, and also catalogs duplicate marking differences.
      */
@@ -407,6 +430,10 @@ public final class SamComparison {
         catalogDuplicateDifferences(s1, s2);
         final AlignmentComparison comp = compareAlignmentRecords(s1, s2);
         comparisonMetric.updateMetric(comp);
+
+        if (samComparisonArgumentCollection.OUTPUT_MQ_CONCORDANCE != null) {
+            compareAndUpdateMappingQualityConcordance(s1, s2);
+        }
     }
 
     private void catalogDuplicateDifferences(final SAMRecord s1, final SAMRecord s2) {

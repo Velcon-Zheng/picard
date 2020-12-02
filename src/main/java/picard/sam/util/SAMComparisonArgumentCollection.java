@@ -3,6 +3,8 @@ package picard.sam.util;
 import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.ArgumentCollection;
 
+import java.io.File;
+
 /**
  * Argument collection for SAM comparison
  */
@@ -22,6 +24,12 @@ public class SAMComparisonArgumentCollection {
     public boolean LENIENT_UNKNOWN_MQ_ALIGNMENT;
 
     @Argument(doc = "When running in LENIENT_LOW_MQ_ALIGNMENT mode, reads which have mapping quality below this value will be counted as matches. " +
-        "if LENIENT_LOW_MQ_ALIGNMENT is false (default), then this argument has no effect.")
+            "if LENIENT_LOW_MQ_ALIGNMENT is false (default), then this argument has no effect.")
     public int LOW_MQ_THRESHOLD = 3;
+
+    @Argument(doc = "If set, generate a histogram for mapping quality concordance between the two SAM files and write it to the specified output file. " +
+            "In this histogram, an entry of 10 at bin \"20,30\" means that 10 reads in the first file have mapping quality 20 while those same reads have mapping quality 30 in the second file. " +
+            "The reads are associated based solely on read names and not the mapped position. Only primary alignments are included, but all duplicate reads are counted individually.",
+            optional = true)
+    public File OUTPUT_MQ_CONCORDANCE = null;
 }
