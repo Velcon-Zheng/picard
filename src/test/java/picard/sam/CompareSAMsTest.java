@@ -91,7 +91,7 @@ public class CompareSAMsTest extends CommandLineProgramTest {
         final Path tmpOutput = Files.createTempFile("compareSam", ".tsv");
         final String in1 = new File(TEST_FILES_DIR, f1).getAbsolutePath();
         final String in2 = new File(TEST_FILES_DIR, f2).getAbsolutePath();
-        ArrayList<String> commandArgs = new ArrayList<>(
+        final ArrayList<String> commandArgs = new ArrayList<>(
                 Arrays.asList(
                         in1,
                         in2,
@@ -166,7 +166,7 @@ public class CompareSAMsTest extends CommandLineProgramTest {
         final Path tmpMQConcordanceOutput = Files.createTempFile("compareSam.mqconcordance", ".tsv");
         final String in1 = new File(TEST_FILES_DIR, f1).getAbsolutePath();
         final String in2 = new File(TEST_FILES_DIR, f2).getAbsolutePath();
-        ArrayList<String> commandArgs = new ArrayList<>(
+        final ArrayList<String> commandArgs = new ArrayList<>(
                 Arrays.asList(
                         in1,
                         in2,
@@ -174,6 +174,7 @@ public class CompareSAMsTest extends CommandLineProgramTest {
                         "OUTPUT_MQ_CONCORDANCE=" + tmpMQConcordanceOutput
                 )
         );
+        // If the files cannot be compared (e.g. if their sort order differs) we expect an exception to be thrown.
         if (expectedMQConcordance == null) {
             boolean exceptionThrown = false;
             try {
@@ -184,7 +185,7 @@ public class CompareSAMsTest extends CommandLineProgramTest {
                 Assert.assertTrue(exceptionThrown);
             }
         } else {
-            Map<String, Integer> expectedMQConcordanceMap = Stream.of(expectedMQConcordance).collect(Collectors.toMap(data -> (String) data[0], data -> (Integer) data[1]));
+            final Map<String, Integer> expectedMQConcordanceMap = Stream.of(expectedMQConcordance).collect(Collectors.toMap(data -> (String) data[0], data -> (Integer) data[1]));
             final Histogram<String> expectedMQConcordanceHistogram = new Histogram<>();
             expectedMQConcordanceMap.forEach(expectedMQConcordanceHistogram::increment);
 
