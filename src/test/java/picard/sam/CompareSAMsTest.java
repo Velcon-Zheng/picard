@@ -91,7 +91,7 @@ public class CompareSAMsTest extends CommandLineProgramTest {
         final Path tmpOutput = Files.createTempFile("compareSam", ".tsv");
         final String in1 = new File(TEST_FILES_DIR, f1).getAbsolutePath();
         final String in2 = new File(TEST_FILES_DIR, f2).getAbsolutePath();
-        final ArrayList<String> commandArgs = new ArrayList<>(
+        ArrayList<String> commandArgs = new ArrayList<>(
                 Arrays.asList(
                         in1,
                         in2,
